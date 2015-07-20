@@ -1913,6 +1913,23 @@ typedef enum {
     BLADERF_VCTCXO_TAMER_10_MHZ = 2
 } bladerf_vctcxo_tamer_mode;
 
+/** Set AGC DC corrections for max, mid, and low gains
+ *
+ * @param[in]   dev         Device handle
+ * @param[in]   q_max       Q DC Offset at Max gain
+ * @param[in]   i_max       I DC Offset at Max gain
+ * @param[in]   q_mid       Q DC Offset at Mid gain
+ * @param[in]   i_mid       I DC Offset at Mid gain
+ * @param[in]   q_low       Q DC Offset at Low gain
+ * @param[in]   i_low       I DC Offset at Low gain
+ *
+ * @return 0 on success, value from \ref RETCODES list upon failure
+ */
+API_EXPORT
+int CALL_CONV bladerf_set_agc_dc_correction(struct bladerf *dev, int16_t q_max, int16_t i_max,
+                                  int16_t q_mid, int16_t i_mid,
+                                  int16_t q_low, int16_t i_low);
+
 /**
  * Set the value of the specified configuration parameter
  *
