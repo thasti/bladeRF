@@ -1,0 +1,3 @@
+[submodule "hdl/fpga/ip/thasti/irs-vhdl"]
+	path = hdl/fpga/ip/thasti/irs-vhdl
+	url = ssh://gogs@loetlabor-jena.de:24/thasti/irs-vhdl.git

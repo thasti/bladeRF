@@ -84,6 +84,9 @@ make_revision atsc_tx
 # Create ADSB receiver
 make_revision adsb
 
+# Create IRS receiver
+make_revision irsrx
+
 # Projects created!
 puts "bladeRF projects created.  Please use the build.tcl script to build images.\n"
 puts "Revisions:"
