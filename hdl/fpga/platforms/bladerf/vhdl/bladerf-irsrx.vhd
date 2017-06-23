@@ -264,8 +264,10 @@ architecture irsrx_bladerf of bladerf is
     signal rx_sample_corrected_q : signed(15 downto 0);
     signal rx_sample_corrected_valid : std_logic;
 
+	signal qpsk_rx_reset		: std_logic_vector(0 downto 0);
 	signal rx_sym_valid			: std_logic;
 	signal rx_sym				: std_logic_vector(1 downto 0);
+	signal tr_freq_out			: std_logic_vector(15 downto 0);
 	signal tr_ld_out			: std_logic_vector(15 downto 0);
 	signal tr_agc_out			: std_logic_vector(15 downto 0);
 	signal cr_ld_ebn0_out		: std_logic_vector(15 downto 0);
@@ -341,8 +343,11 @@ architecture irsrx_bladerf of bladerf is
     signal lms_rx_enable_qualified                  : std_logic;
     signal tx_sample_fifo_rempty_untriggered        : std_logic;
 
-	signal fabric_handshake_req		: std_logic := '0';
-	signal fabric_handshake_cnt		: unsigned(5 downto 0) := (others => '0');
+	signal fabric_read_handshake_req		: std_logic := '0';
+	signal fabric_read_handshake_cnt		: unsigned(5 downto 0) := (others => '0');
+	
+	signal fabric_write_handshake_req		: std_logic := '0';
+	signal fabric_write_handshake_cnt		: unsigned(5 downto 0) := (others => '0');
 
     signal register0                : std_logic_vector(31 downto 0);
     signal register1                : std_logic_vector(31 downto 0);
@@ -352,6 +357,8 @@ architecture irsrx_bladerf of bladerf is
     signal register5                : std_logic_vector(31 downto 0);
     signal register6                : std_logic_vector(31 downto 0);
     signal register7                : std_logic_vector(31 downto 0);
+
+	signal register0_write			: std_logic_vector(31 downto 0);
 
 begin
     correction_tx_phase <= signed(correction_tx_phase_gain(31 downto 16));
@@ -664,7 +671,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register3(15 downto 0),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
     q_pre_sync : entity work.handshake
@@ -677,7 +684,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register3(31 downto 16),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
     
@@ -693,7 +700,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register4(11 downto 0),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
     q_post_sync : entity work.handshake
@@ -706,7 +713,21 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register4(27 downto 16),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
+		dest_ack			=> open
+	) ;
+    
+	tr_freq_out_sync : entity work.handshake
+    generic map (
+    	DATA_WIDTH         =>  16
+    ) port map (
+    	source_reset		=>  '0',
+		source_clock		=> rx_clock,
+		source_data			=> tr_freq_out,
+		dest_reset			=> '0',
+		dest_clock			=> \80MHz\,
+		dest_data			=> register2(15 downto 0),
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
 	
@@ -720,7 +741,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register0(15 downto 0),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
     
@@ -734,7 +755,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register0(31 downto 16),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
 	
@@ -748,7 +769,7 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register1(31 downto 16),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
 		dest_ack			=> open
 	) ;
 	
@@ -762,15 +783,36 @@ begin
 		dest_reset			=> '0',
 		dest_clock			=> \80MHz\,
 		dest_data			=> register1(15 downto 0),
-		dest_req			=> fabric_handshake_req,
+		dest_req			=> fabric_read_handshake_req,
+		dest_ack			=> open
+	) ;
+	
+	qpsk_rx_reset_sync : entity work.handshake
+    generic map (
+    	DATA_WIDTH         =>  1
+    ) port map (
+    	source_reset		=>  '0',
+		source_clock		=> \80MHz\,
+		source_data			=> register0_write(0 downto 0),
+		dest_reset			=> '0',
+		dest_clock			=> rx_clock,
+		dest_data			=> qpsk_rx_reset,
+		dest_req			=> fabric_write_handshake_req,
 		dest_ack			=> open
 	) ;
 
-	gen_handshake_req : process
+	gen_handshake_read_req : process
 	begin
 		wait until rising_edge(\80MHz\);
-		fabric_handshake_cnt <= fabric_handshake_cnt + to_unsigned(1, fabric_handshake_cnt'length);
-		fabric_handshake_req <= fabric_handshake_cnt(fabric_handshake_cnt'high);
+		fabric_read_handshake_cnt <= fabric_read_handshake_cnt + to_unsigned(1, fabric_read_handshake_cnt'length);
+		fabric_read_handshake_req <= fabric_read_handshake_cnt(fabric_read_handshake_cnt'high);
+	end process;
+	
+	gen_handshake_write_req : process
+	begin
+		wait until rising_edge(rx_clock);
+		fabric_write_handshake_cnt <= fabric_write_handshake_cnt + to_unsigned(1, fabric_write_handshake_cnt'length);
+		fabric_write_handshake_req <= fabric_write_handshake_cnt(fabric_write_handshake_cnt'high);
 	end process;
 	
     -- FX3 GPIF
@@ -883,12 +925,13 @@ begin
 	U_qpsk_rx : entity work.qpsk_rx_timing_carrier_recovery
 	port map(
 		clk => rx_clock,
-		rst => rx_reset,
+		rst => qpsk_rx_reset(0),
 		iq_valid => rx_sample_corrected_valid,
-		i => to_sfixed(rx_sample_corrected_i(11 downto 0), 1, -10),
-		q => to_sfixed(rx_sample_corrected_q(11 downto 0), 1, -10),
+		i => to_sfixed(std_logic_vector(rx_sample_corrected_i(11 downto 0)), 1, -10),
+		q => to_sfixed(std_logic_vector(rx_sample_corrected_q(11 downto 0)), 1, -10),
 		iq_sym_valid => rx_sym_valid,
 		iq_sym => rx_sym,
+		to_slv(tr_freq_out) => tr_freq_out,
 		to_slv(tr_ld_out) => tr_ld_out,
 		to_slv(tr_agc_out) => tr_agc_out,
 		to_slv(cr_ld_ebn0_out) => cr_ld_ebn0_out,
@@ -1152,9 +1195,9 @@ begin
         tx_trigger_ctl_out_port         => tx_trigger_ctl,
         rx_trigger_ctl_in_port          => rx_trigger_ctl_rb,
         tx_trigger_ctl_in_port          => tx_trigger_ctl_rb,
-        fabric_probe_out_register0_out  => open,
+        fabric_probe_out_register0_out  => register0_write,
         fabric_probe_out_register1_out  => open,
-        fabric_probe_out_register2_out  => register2,
+        fabric_probe_out_register2_out  => open,
         fabric_probe_out_register3_out  => open,
         fabric_probe_out_register4_out  => open,
         fabric_probe_out_register5_out  => register5,
