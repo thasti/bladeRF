@@ -43,6 +43,10 @@ struct complexf {
     float q;
 };
 
+struct gain_mode {
+    bladerf_lna_gain lna_gain;
+    int rxvga1, rxvga2;
+};
 /*******************************************************************************
  * Debug items
  ******************************************************************************/
@@ -616,6 +620,73 @@ static void init_rx_cal_sweep(int16_t *corr, unsigned int *sweep_len,
     *sweep_len = actual_len;
 }
 
+static int save_gains(struct rx_cal *cal, struct gain_mode *gain) {
+    int status;
+
+    status = bladerf_get_lna_gain(cal->dev, &gain->lna_gain);
+    if (status != 0) {
+        return status;
+    }
+
+    status = bladerf_get_rxvga1(cal->dev, &gain->rxvga1);
+    if (status != 0) {
+        return status;
+    }
+
+    status = bladerf_get_rxvga2(cal->dev, &gain->rxvga2);
+    if (status != 0) {
+        return status;
+    }
+
+    return status;
+}
+
+static int load_gains(struct rx_cal *cal, struct gain_mode *gain) {
+    int status;
+
+    status = bladerf_set_lna_gain(cal->dev, gain->lna_gain);
+    if (status != 0) {
+        return status;
+    }
+
+    status = bladerf_set_rxvga1(cal->dev, gain->rxvga1);
+    if (status != 0) {
+        return status;
+    }
+
+    status = bladerf_set_rxvga2(cal->dev, gain->rxvga2);
+    if (status != 0) {
+        return status;
+    }
+
+    return status;
+}
+
+static int rx_cal_dc_off(struct rx_cal *cal, struct gain_mode *gains,
+                        int16_t *dc_i, int16_t *dc_q)
+{
+    int status = BLADERF_ERR_UNEXPECTED;
+
+    float mean_i, mean_q;
+
+    status = load_gains(cal, gains);
+    if (status != 0) {
+        return status;
+    }
+
+    status = rx_samples(cal->dev, cal->samples, cal->num_samples,
+                        &cal->ts, RX_CAL_TS_INC);
+    if (status != 0) {
+        return status;
+    }
+
+    sample_mean(cal->samples, cal->num_samples, &mean_i, &mean_q);
+    *dc_i = mean_i;
+    *dc_q = mean_q;
+
+    return 0;
+}
+
 static int rx_cal_sweep(struct rx_cal *cal,
                         int16_t *corr, unsigned int sweep_len,
                         int16_t *result_i, int16_t *result_q,
@@ -682,6 +753,13 @@ static int perform_rx_cal(struct rx_cal *cal, struct dc_calibration_params *p)
     int status;
     int16_t i_est, q_est;
     unsigned int sweep_len = RX_CAL_MAX_SWEEP_LEN;
+    struct gain_mode saved_gains;
+
+    struct gain_mode agc_gains[] = {
+        { .lna_gain = BLADERF_LNA_GAIN_MAX, .rxvga1 = 30, .rxvga2 = 15 },  /* AGC Max Gain */
+        { .lna_gain = BLADERF_LNA_GAIN_MID, .rxvga1 = 30, .rxvga2 = 0  },  /* AGC Mid Gain */
+        { .lna_gain = BLADERF_LNA_GAIN_MID, .rxvga1 = 12, .rxvga2 = 0  }   /* AGC Min Gain */
+    };
 
     status = rx_cal_update_frequency(cal, p->frequency);
     if (status != 0) {
@@ -710,6 +788,29 @@ static int perform_rx_cal(struct rx_cal *cal, struct dc_calibration_params *p)
 
     /* Apply the nominal correction values */
     status = set_rx_dc_corr(cal->dev, p->corr_i, p->corr_q);
+
+    /* Measure DC correction for AGC */
+    status = save_gains(cal, &saved_gains);
+    if (status != 0) {
+        return status;
+    }
+
+    status = rx_cal_dc_off(cal, &agc_gains[2], &p->min_dc_i, &p->min_dc_q);
+    if (status != 0) {
+        return status;
+    }
+
+    status = rx_cal_dc_off(cal, &agc_gains[1], &p->mid_dc_i, &p->mid_dc_q);
+    if (status != 0) {
+        return status;
+    }
+
+    status = rx_cal_dc_off(cal, &agc_gains[0], &p->max_dc_i, &p->max_dc_q);
+    if (status != 0) {
+        return status;
+    }
+
+    status = load_gains(cal, &saved_gains);
 
     return status;
 }
