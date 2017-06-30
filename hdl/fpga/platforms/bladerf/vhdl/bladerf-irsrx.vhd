@@ -883,9 +883,9 @@ begin
         meta_fifo_data      =>  rx_meta_fifo.wdata,
         meta_fifo_write     =>  rx_meta_fifo.wreq,
 
-        in_i                =>  rx_sample_corrected_i,
-        in_q                =>  rx_sample_corrected_q,
-        in_valid            =>  rx_sample_corrected_valid,
+        in_i                =>  rx_mux_i,
+        in_q                =>  rx_mux_q,
+        in_valid            =>  rx_mux_valid,
 
         overflow_led        =>  rx_overflow_led,
         overflow_count      =>  rx_overflow_count,
@@ -948,9 +948,9 @@ begin
         reset               => rx_reset,
         clock               => rx_clock,
 
-        in_real             => resize(rx_mux_i,16),
-        in_imag             => resize(rx_mux_q,16),
-        in_valid            => rx_mux_valid,
+        in_real             => resize(rx_sample_i,16),
+        in_imag             => resize(rx_sample_q,16),
+        in_valid            => rx_sample_valid,
 
         out_real            => rx_sample_corrected_i,
         out_imag            => rx_sample_corrected_q,
@@ -1088,10 +1088,10 @@ begin
         elsif( rising_edge(rx_clock) ) then
             case rx_mux_mode is
                 when RX_MUX_NORMAL =>
-                    rx_mux_i <= rx_sample_i ;
-                    rx_mux_q <= rx_sample_q ;
+                    rx_mux_i <= rx_sample_corrected_i ;
+                    rx_mux_q <= rx_sample_corrected_q ;
                     if( lms_rx_enable_qualified = '1' ) then
-                        rx_mux_valid <= rx_sample_valid ;
+                        rx_mux_valid <= rx_sample_corrected_valid ;
                     else
                         rx_mux_valid <= '0' ;
                     end if ;
